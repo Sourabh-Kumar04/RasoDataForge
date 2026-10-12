@@ -9,6 +9,7 @@ build/
 *.onnx
 runs/
 *.log
+pip_install*.log
 tmp/
 *.zip
 .DS_Store
@@ -16,3 +17,6 @@ tmp/
 # Internal briefs
 AGY_BRIEF.md
 PROTOTYPE_BRIEF.md
+
+# Deck drafts, reviews, and scorecards
+DECK_*.md

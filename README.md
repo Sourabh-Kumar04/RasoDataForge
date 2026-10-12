@@ -125,4 +125,4 @@ rasodataforge/
 
 ## License
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE) — free for non-commercial use, commercial use requires a separate license.
