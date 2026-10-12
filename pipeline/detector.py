@@ -29,6 +29,7 @@ class DetectionResult:
     """Accumulated detection results ready for export."""
     frame_results: list[dict] = field(default_factory=list)
     category_map: dict[int, str] = field(default_factory=dict)  # id -> name
+    preview_frame_indices: list[int] = field(default_factory=list)
 
 
 def run_detection_pipeline(
@@ -37,6 +38,7 @@ def run_detection_pipeline(
     model_size: str = "yolov8n.pt",
     conf_threshold: float = 0.30,
     iou_threshold: float = 0.45,
+    max_preview_frames: Optional[int] = 50,
     progress_cb=None,
 ) -> tuple[DetectionResult, list[np.ndarray]]:
     """
@@ -54,6 +56,8 @@ def run_detection_pipeline(
         Detection confidence threshold.
     iou_threshold : float
         NMS IoU threshold.
+    max_preview_frames : int | None
+        Max number of annotated preview frames to keep in memory (avoids OOM).
     progress_cb : callable | None
         Optional callback(current, total) for UI progress.
 
@@ -61,10 +65,13 @@ def run_detection_pipeline(
     -------
     (DetectionResult, annotated_frames)
         DetectionResult contains per-frame data; annotated_frames is a list
-        of BGR numpy arrays (one per processed frame) with bounding-box overlays.
+        of BGR numpy arrays with bounding-box overlays.
     """
     if not _DEPS_OK:
         raise RuntimeError(f"Missing dependencies: {_IMPORT_ERROR}")
+
+    import torch
+    device = 0 if torch.cuda.is_available() else "cpu"
 
     model = YOLO(model_size)
 
@@ -75,6 +82,14 @@ def run_detection_pipeline(
 
     result = DetectionResult()
     annotated_frames: list[np.ndarray] = []
+
+    # Configure which frames to annotate for preview
+    if max_preview_frames is None or len(frame_indices) <= max_preview_frames:
+        result.preview_frame_indices = list(frame_indices)
+    else:
+        sample_positions = np.linspace(0, len(frame_indices) - 1, max_preview_frames, dtype=int)
+        result.preview_frame_indices = [frame_indices[p] for p in sample_positions]
+    preview_fids_set = set(result.preview_frame_indices)
 
     # Build category map from model names
     for cid, cname in model.names.items():
@@ -101,6 +116,7 @@ def run_detection_pipeline(
                 frame,
                 conf=conf_threshold,
                 iou=iou_threshold,
+                device=device,
                 verbose=False,
             )[0]
 
@@ -110,20 +126,21 @@ def run_detection_pipeline(
             # ByteTrack update
             detections = tracker.update_with_detections(detections)
 
-            # Annotate frame
-            labels = [
-                f"#{tid} {model.names[int(cid)]}"
-                for tid, cid in zip(
-                    detections.tracker_id if detections.tracker_id is not None
-                    else [None] * len(detections),
-                    detections.class_id if detections.class_id is not None
-                    else [],
-                )
-            ]
-            annotated = frame.copy()
-            annotated = box_annotator.annotate(annotated, detections)
-            annotated = label_annotator.annotate(annotated, detections, labels=labels)
-            annotated_frames.append(annotated)
+            # Annotate frame only if needed for preview
+            if frame_idx in preview_fids_set:
+                labels = [
+                    f"#{tid} {model.names[int(cid)]}"
+                    for tid, cid in zip(
+                        detections.tracker_id if detections.tracker_id is not None
+                        else [None] * len(detections),
+                        detections.class_id if detections.class_id is not None
+                        else [],
+                    )
+                ]
+                annotated = frame.copy()
+                annotated = box_annotator.annotate(annotated, detections)
+                annotated = label_annotator.annotate(annotated, detections, labels=labels)
+                annotated_frames.append(annotated)
 
             # Store per-frame COCO-style data
             frame_data: dict = {

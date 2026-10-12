@@ -36,9 +36,10 @@ def _frame_score_yolo(
     frame: np.ndarray,
     model,
     desc_tokens: list[str],
+    device: str | int = "cpu",
 ) -> float:
     """Return relevance score [0, 1] for a single frame using YOLO."""
-    results = model(frame, verbose=False)[0]
+    results = model(frame, device=device, verbose=False)[0]
     best = 0.0
     if results.boxes is None:
         return best
@@ -98,8 +99,11 @@ def filter_relevant_frames(
 
     # Try YOLO nano for relevance scoring
     model = None
+    device = "cpu"
     if _YOLO_AVAILABLE and desc_tokens:
         try:
+            import torch
+            device = 0 if torch.cuda.is_available() else "cpu"
             model = YOLO("yolov8n.pt")  # nano — fast
         except Exception:
             model = None
@@ -122,7 +126,7 @@ def filter_relevant_frames(
                 progress_cb(sampled, total_sampled)
 
             if model is not None:
-                score = _frame_score_yolo(frame, model, desc_tokens)
+                score = _frame_score_yolo(frame, model, desc_tokens, device=device)
                 if score >= relevance_threshold:
                     # Mark surrounding frames as relevant (±sample_every window)
                     start = max(0, frame_idx - sample_every + 1)

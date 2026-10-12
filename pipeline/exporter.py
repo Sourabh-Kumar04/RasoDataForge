@@ -113,7 +113,15 @@ def export_to_zip(
     coco = build_coco_json(result, video_path, description)
 
     # Subsample preview frames to avoid huge zips
-    if len(annotated_frames) > max_preview_frames:
+    if getattr(result, "preview_frame_indices", None) and len(result.preview_frame_indices) == len(annotated_frames):
+        if len(annotated_frames) > max_preview_frames:
+            indices = np.linspace(0, len(annotated_frames) - 1, max_preview_frames, dtype=int)
+            preview_frames = [annotated_frames[i] for i in indices]
+            preview_fids = [result.preview_frame_indices[i] for i in indices]
+        else:
+            preview_frames = annotated_frames
+            preview_fids = result.preview_frame_indices
+    elif len(annotated_frames) > max_preview_frames:
         indices = np.linspace(0, len(annotated_frames) - 1, max_preview_frames, dtype=int)
         preview_frames = [annotated_frames[i] for i in indices]
         preview_fids = [frame_indices[i] for i in indices]
