@@ -12,3 +12,7 @@ runs/
 tmp/
 *.zip
 .DS_Store
+
+# Internal briefs
+AGY_BRIEF.md
+PROTOTYPE_BRIEF.md
